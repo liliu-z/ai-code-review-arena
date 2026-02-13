@@ -51,13 +51,13 @@ python run.py --force            # 强制重跑 (忽略已有结果)
 models:
   - id: claude
     magpie_provider: claude-code
-    judge_cmd: "claude -p '{prompt_file}'"
+    judge_cmd: "claude -p"           # prompt 通过 stdin 传入
   - id: gemini
     magpie_provider: gemini-cli
-    judge_cmd: "gemini '{prompt_file}'"
+    judge_cmd: "gemini"              # prompt 通过 stdin 传入
   - id: codex
     magpie_provider: codex-cli
-    judge_cmd: "codex exec '{prompt_file}'"
+    judge_cmd: "codex exec -"        # prompt 通过 stdin 传入
 ```
 
 **添加新模型**：只需加一条，填 `magpie_provider` 和 `judge_cmd`。

@@ -2,10 +2,13 @@
 
 import json
 import os
+import re
+import shlex
 import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 import yaml
@@ -134,11 +137,13 @@ def generate_magpie_config(models, config, is_hard=False):
     # Use first model as analyzer and summarizer
     first_provider = models[0]["magpie_provider"]
 
+    # Dynamically build providers from models being used
+    providers = {}
+    for model in models:
+        providers[model["magpie_provider"]] = {"enabled": True}
+
     magpie_config = {
-        "providers": {
-            "claude-code": {"enabled": True},
-            "codex-cli": {"enabled": True},
-        },
+        "providers": providers,
         "defaults": {
             "max_rounds": rounds,
             "output_format": "json",
@@ -157,7 +162,7 @@ def generate_magpie_config(models, config, is_hard=False):
 
     # Write to magpie_configs/ directory with unique name
     MAGPIE_CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
-    config_path = MAGPIE_CONFIGS_DIR / f"magpie_{int(time.time() * 1000)}_{os.getpid()}.yaml"
+    config_path = MAGPIE_CONFIGS_DIR / f"magpie_{uuid.uuid4().hex[:12]}.yaml"
 
     with open(config_path, "w") as f:
         yaml.dump(magpie_config, f, default_flow_style=False, allow_unicode=True)
@@ -207,7 +212,7 @@ def run_magpie(pr_url, config_path, output_path, format="json"):
 
 
 def run_judge(model_config, prompt_text):
-    """Run a judge model CLI with the given prompt.
+    """Run a judge model CLI with the given prompt via stdin pipe.
 
     Args:
         model_config: model dict from config (has 'id', 'judge_cmd')
@@ -216,36 +221,26 @@ def run_judge(model_config, prompt_text):
     Returns:
         str: model's response text
     """
-    # Write prompt to temp file to avoid shell quoting issues
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        f.write(prompt_text)
-        prompt_file = f.name
+    judge_cmd = model_config["judge_cmd"]
 
-    try:
-        judge_cmd = model_config["judge_cmd"]
-        # Replace {prompt_file} placeholder with actual path
-        # The CLI reads from the file path
-        cmd = judge_cmd.replace("{prompt_file}", prompt_file)
+    result = subprocess.run(
+        judge_cmd,
+        shell=True,
+        input=prompt_text,
+        capture_output=True,
+        text=True,
+        timeout=300,  # 5 minute timeout for judge
+    )
 
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 minute timeout for judge
-        )
+    if result.returncode != 0:
+        print(f"  [错误] {model_config['id']} 裁判返回码 {result.returncode}")
+        if result.stderr:
+            lines = result.stderr.strip().split("\n")
+            for line in lines[-3:]:
+                print(f"  {line}")
+        return ""
 
-        if result.returncode != 0:
-            print(f"  [错误] {model_config['id']} 裁判返回码 {result.returncode}")
-            if result.stderr:
-                lines = result.stderr.strip().split("\n")
-                for line in lines[-3:]:
-                    print(f"  {line}")
-            return ""
-
-        return result.stdout.strip()
-    finally:
-        os.unlink(prompt_file)
+    return result.stdout.strip()
 
 
 def parse_judge_json(response):
@@ -260,7 +255,6 @@ def parse_judge_json(response):
     text = response.strip()
 
     # Try to find JSON in code blocks first
-    import re
     json_block = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', text, re.DOTALL)
     if json_block:
         text = json_block.group(1).strip()

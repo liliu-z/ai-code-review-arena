@@ -1,13 +1,13 @@
 models:
   - id: claude
     magpie_provider: claude-code
-    judge_cmd: "claude -p '{prompt_file}'"
+    judge_cmd: "claude -p"
   - id: gemini
     magpie_provider: gemini-cli
-    judge_cmd: "gemini '{prompt_file}'"
+    judge_cmd: "gemini"
   - id: codex
     magpie_provider: codex-cli
-    judge_cmd: "codex exec '{prompt_file}'"
+    judge_cmd: "codex exec -"
 
 execution:
   concurrency: 4
