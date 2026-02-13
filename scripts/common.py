@@ -60,13 +60,13 @@ def load_json(path):
         return json.load(f)
 
 
-def print_progress(phase, index, total, pr_id, model_id=None, status="启动", elapsed=None):
+def print_progress(phase, index, total, pr_id, model_id=None, status="started", elapsed=None):
     """Print formatted progress line.
 
     Examples:
-        [硬分] [1/24] pr-33820 × claude ... 启动
-        [硬分] [1/24] pr-33820 × claude ... 完成 (2m34s)
-        [硬分] [跳过] pr-33820 × claude (已有结果)
+        [Hard] [1/24] pr-33820 × claude ... started
+        [Hard] [1/24] pr-33820 × claude ... done (2m34s)
+        [Hard] [skipped] pr-33820 × claude (result exists)
     """
     elapsed_str = ""
     if elapsed is not None:
@@ -77,9 +77,9 @@ def print_progress(phase, index, total, pr_id, model_id=None, status="启动", e
         else:
             elapsed_str = f" ({seconds}s)"
 
-    if status == "跳过":
+    if status == "skipped":
         model_part = f" × {model_id}" if model_id else ""
-        print(f"[{phase}] [跳过] {pr_id}{model_part} (已有结果)")
+        print(f"[{phase}] [skipped] {pr_id}{model_part} (result exists)")
     else:
         counter = f"[{index}/{total}]"
         model_part = f" × {model_id}" if model_id else ""
@@ -90,9 +90,9 @@ def print_progress(phase, index, total, pr_id, model_id=None, status="启动", e
 
 def print_phase_start(phase, task_count, concurrency=None):
     """Print phase start banner."""
-    conc = f", 并发 {concurrency}" if concurrency else ""
+    conc = f", concurrency {concurrency}" if concurrency else ""
     print(f"\n{'='*60}")
-    print(f"[{phase}] 开始: {task_count} 个任务{conc}")
+    print(f"[{phase}] starting: {task_count} tasks{conc}")
     print(f"{'='*60}")
     sys.stdout.flush()
 
@@ -101,7 +101,7 @@ def print_phase_end(phase, total, elapsed):
     """Print phase end banner."""
     minutes = int(elapsed // 60)
     seconds = int(elapsed % 60)
-    print(f"[{phase}] 全部完成: {total} 个任务, 耗时 {minutes}m{seconds:02d}s")
+    print(f"[{phase}] all done: {total} tasks, elapsed {minutes}m{seconds:02d}s")
     sys.stdout.flush()
 
 
@@ -200,7 +200,7 @@ def run_magpie(pr_url, config_path, output_path, format="json"):
     )
 
     if result.returncode != 0:
-        print(f"  [错误] magpie 返回码 {result.returncode}")
+        print(f"  [ERROR] magpie return code {result.returncode}")
         if result.stderr:
             # Print last 5 lines of stderr
             lines = result.stderr.strip().split("\n")
@@ -233,7 +233,7 @@ def run_judge(model_config, prompt_text):
     )
 
     if result.returncode != 0:
-        print(f"  [错误] {model_config['id']} 裁判返回码 {result.returncode}")
+        print(f"  [ERROR] {model_config['id']} judge return code {result.returncode}")
         if result.stderr:
             lines = result.stderr.strip().split("\n")
             for line in lines[-3:]:
@@ -273,7 +273,7 @@ def parse_judge_json(response):
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        print(f"  [警告] 无法解析裁判 JSON 输出")
+        print(f"  [WARN] failed to parse judge JSON output")
         return {}
 
 

@@ -16,7 +16,7 @@ def run_report(config, manifest):
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'='*60}")
-    print(f"[报告] 生成中...")
+    print(f"[Report] generating...")
     print(f"{'='*60}")
 
     hard_summary = _generate_hard_report(config, manifest, reports_dir)
@@ -24,7 +24,7 @@ def run_report(config, manifest):
     bias_summary = _generate_bias_report(config, manifest, reports_dir)
     _generate_text_summary(config, manifest, reports_dir, hard_summary, soft_summary, bias_summary)
 
-    print(f"[报告] 完成: {reports_dir}")
+    print(f"[Report] done: {reports_dir}")
 
 
 def _generate_hard_report(config, manifest, reports_dir):
@@ -35,7 +35,7 @@ def _generate_hard_report(config, manifest, reports_dir):
     # Load verdicts
     verdicts_path = RESULTS_DIR / "judge" / "hard" / "verdicts.json"
     if not verdicts_path.exists():
-        print("[报告] 跳过硬分报告 (无裁判结果)")
+        print("[Report] skipped hard score report (no judge results)")
         return {}
 
     verdicts = load_json(verdicts_path)
@@ -71,7 +71,7 @@ def _generate_hard_report(config, manifest, reports_dir):
             writer = csv.DictWriter(f, fieldnames=rows[0].keys())
             writer.writeheader()
             writer.writerows(rows)
-        print(f"  硬分明细: {csv_path}")
+        print(f"  Hard score details: {csv_path}")
 
     # Write summary JSON
     summary_data = {}
@@ -97,7 +97,7 @@ def _generate_hard_report(config, manifest, reports_dir):
         summary_data[model_id] = model_summary
 
     save_json(reports_dir / "hard_summary.json", summary_data)
-    print(f"  硬分汇总: {reports_dir / 'hard_summary.json'}")
+    print(f"  Hard score summary: {reports_dir / 'hard_summary.json'}")
     return summary_data
 
 
@@ -149,7 +149,7 @@ def _generate_soft_report(config, manifest, reports_dir):
             writer = csv.DictWriter(f, fieldnames=rows[0].keys())
             writer.writeheader()
             writer.writerows(rows)
-        print(f"  软分明细: {csv_path}")
+        print(f"  Soft score details: {csv_path}")
 
     # Write summary JSON
     summary_data = {}
@@ -169,7 +169,7 @@ def _generate_soft_report(config, manifest, reports_dir):
         summary_data[model_id] = model_summary
 
     save_json(reports_dir / "soft_summary.json", summary_data)
-    print(f"  软分汇总: {reports_dir / 'soft_summary.json'}")
+    print(f"  Soft score summary: {reports_dir / 'soft_summary.json'}")
     return summary_data
 
 
@@ -226,7 +226,7 @@ def _generate_bias_report(config, manifest, reports_dir):
         }
 
     save_json(reports_dir / "judge_bias.json", bias_data)
-    print(f"  裁判偏见: {reports_dir / 'judge_bias.json'}")
+    print(f"  Judge bias: {reports_dir / 'judge_bias.json'}")
     return bias_data
 
 
@@ -234,13 +234,13 @@ def _generate_text_summary(config, manifest, reports_dir, hard_summary, soft_sum
     """Generate human-readable summary."""
     lines = []
     lines.append("=" * 60)
-    lines.append("AI Code Review Arena - 评测结果汇总")
+    lines.append("AI Code Review Arena - Evaluation Results Summary")
     lines.append("=" * 60)
 
     # Hard scores
     if hard_summary:
-        lines.append("\n## 硬分：Bug 检出率")
-        lines.append(f"{'模型':<12} {'L1':<10} {'L2':<10} {'L3':<10} {'总计':<10}")
+        lines.append("\n## Hard Score: Bug Detection Rate")
+        lines.append(f"{'Model':<12} {'L1':<10} {'L2':<10} {'L3':<10} {'Total':<10}")
         lines.append("-" * 52)
         for model_id, by_diff in hard_summary.items():
             l1 = by_diff.get("L1", {})
@@ -257,9 +257,9 @@ def _generate_text_summary(config, manifest, reports_dir, hard_summary, soft_sum
 
     # Soft scores
     if soft_summary:
-        lines.append("\n## 软分：Review 质量评分 (1-10)")
+        lines.append("\n## Soft Score: Review Quality Rating (1-10)")
         dims = config["judge"]["dimensions"]
-        header = f"{'模型':<12}" + "".join(f" {d['name']:<10}" for d in dims) + f" {'综合':<6}"
+        header = f"{'Model':<12}" + "".join(f" {d['name']:<10}" for d in dims) + f" {'Overall':<6}"
         lines.append(header)
         lines.append("-" * len(header))
         for model_id, by_dim in soft_summary.items():
@@ -273,8 +273,8 @@ def _generate_text_summary(config, manifest, reports_dir, hard_summary, soft_sum
 
     # Bias
     if bias_summary:
-        lines.append("\n## 裁判偏见分析 (自评 - 评他人)")
-        lines.append(f"{'模型':<12} {'自评均分':<10} {'评他均分':<10} {'偏差':<8}")
+        lines.append("\n## Judge Bias Analysis (Self Score - Others Score)")
+        lines.append(f"{'Model':<12} {'Self Avg':<10} {'Other Avg':<10} {'Bias':<8}")
         lines.append("-" * 40)
         for model_id, bias in bias_summary.items():
             sign = "+" if bias["bias"] > 0 else ""
@@ -295,4 +295,4 @@ def _generate_text_summary(config, manifest, reports_dir, hard_summary, soft_sum
     # Save to file
     with open(reports_dir / "summary.txt", "w") as f:
         f.write(summary_text)
-    print(f"\n  汇总文本: {reports_dir / 'summary.txt'}")
+    print(f"\n  Summary text: {reports_dir / 'summary.txt'}")

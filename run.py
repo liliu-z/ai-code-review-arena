@@ -14,27 +14,27 @@ from scripts.report import run_report
 
 def main():
     parser = argparse.ArgumentParser(
-        description="AI Code Review Arena: 多 AI 模型代码审查竞技场",
+        description="AI Code Review Arena: Multi-AI model code review arena",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
-  python run.py                    # 跑全部流程
-  python run.py --hard             # 只跑硬分 (独立 review)
-  python run.py --soft             # 只跑软分 (辩论)
-  python run.py --judge            # 只跑裁判 (打分)
-  python run.py --report           # 只生成报告
-  python run.py --pr pr-33820      # 只跑指定 PR
-  python run.py --model claude     # 只跑指定模型
-  python run.py --force            # 强制重跑 (忽略已有结果)
+Examples:
+  python run.py                    # Run full pipeline
+  python run.py --hard             # Run hard score only (independent review)
+  python run.py --soft             # Run soft score only (debate)
+  python run.py --judge            # Run judge only (scoring)
+  python run.py --report           # Generate report only
+  python run.py --pr pr-33820      # Run specific PR only
+  python run.py --model claude     # Run specific model only
+  python run.py --force            # Force re-run (ignore existing results)
         """,
     )
-    parser.add_argument("--hard", action="store_true", help="只跑硬分 (每模型独立 review)")
-    parser.add_argument("--soft", action="store_true", help="只跑软分 (全模型辩论)")
-    parser.add_argument("--judge", action="store_true", help="只跑裁判 (硬分判定 + 软分打分)")
-    parser.add_argument("--report", action="store_true", help="只生成报告")
-    parser.add_argument("--pr", help="只跑指定 PR (如 pr-33820)")
-    parser.add_argument("--model", help="只跑指定模型 (如 claude)")
-    parser.add_argument("--force", action="store_true", help="强制重跑，忽略已有结果")
+    parser.add_argument("--hard", action="store_true", help="Run hard score only (independent review per model)")
+    parser.add_argument("--soft", action="store_true", help="Run soft score only (all models debate)")
+    parser.add_argument("--judge", action="store_true", help="Run judge only (hard verdict + soft scoring)")
+    parser.add_argument("--report", action="store_true", help="Generate report only")
+    parser.add_argument("--pr", help="Run specific PR only (e.g. pr-33820)")
+    parser.add_argument("--model", help="Run specific model only (e.g. claude)")
+    parser.add_argument("--force", action="store_true", help="Force re-run, ignore existing results")
 
     args = parser.parse_args()
 
@@ -46,26 +46,26 @@ def main():
     pr_ids = [p["id"] for p in manifest["prs"]]
 
     if args.model and args.model not in model_ids:
-        print(f"错误: 模型 '{args.model}' 不在配置中。可用: {', '.join(model_ids)}")
+        print(f"ERROR: model '{args.model}' not in config. Available: {', '.join(model_ids)}")
         sys.exit(1)
 
     if args.pr and args.pr not in pr_ids:
-        print(f"错误: PR '{args.pr}' 不在 manifest 中。可用: {', '.join(pr_ids)}")
+        print(f"ERROR: PR '{args.pr}' not in manifest. Available: {', '.join(pr_ids)}")
         sys.exit(1)
 
     run_all = not (args.hard or args.soft or args.judge or args.report)
 
     print("=" * 60)
     print("AI Code Review Arena")
-    print(f"模型: {', '.join(model_ids)}")
-    print(f"PR 数量: {len(pr_ids)} ({sum(1 for p in manifest['prs'] if p['category'] == 'hard')} 硬分 + {sum(1 for p in manifest['prs'] if p['category'] == 'soft')} 软分)")
-    print(f"并发: {config['execution']['concurrency']}")
+    print(f"Models: {', '.join(model_ids)}")
+    print(f"PR count: {len(pr_ids)} ({sum(1 for p in manifest['prs'] if p['category'] == 'hard')} hard + {sum(1 for p in manifest['prs'] if p['category'] == 'soft')} soft)")
+    print(f"Concurrency: {config['execution']['concurrency']}")
     if args.pr:
-        print(f"筛选 PR: {args.pr}")
+        print(f"Filter PR: {args.pr}")
     if args.model:
-        print(f"筛选模型: {args.model}")
+        print(f"Filter model: {args.model}")
     if args.force:
-        print("模式: 强制重跑")
+        print("Mode: force re-run")
     print("=" * 60)
 
     total_start = time.time()
@@ -87,7 +87,7 @@ def main():
     minutes = int(total_elapsed // 60)
     seconds = int(total_elapsed % 60)
     print(f"\n{'='*60}")
-    print(f"全部完成! 总耗时: {minutes}m{seconds:02d}s")
+    print(f"All done! Total elapsed: {minutes}m{seconds:02d}s")
     print(f"{'='*60}")
 
 

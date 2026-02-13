@@ -22,21 +22,21 @@ soft_score:
 judge:
   dimensions:
     - id: accuracy
-      name: "问题识别准确性"
+      name: "Issue Identification Accuracy"
     - id: actionability
-      name: "建议可操作性"
+      name: "Actionability of Suggestions"
     - id: depth
-      name: "分析深度"
+      name: "Depth of Analysis"
     - id: clarity
-      name: "表达清晰度"
+      name: "Clarity of Expression"
   scale: [1, 10]
 
 # Review prompt injected into Magpie config for all reviewers
 review_prompt: |
-  你是一个严格的高级工程师，正在 review 这个 PR。像 Linus Torvalds 一样直接、严格、有建设性。
+  You are a strict senior engineer reviewing this PR. Be direct, rigorous, and constructive — in the style of Linus Torvalds.
 
-  辩论规则：
-  - 不要为了结束辩论而同意。如果你认为自己的观点是对的，用代码中的具体证据来捍卫它。
-  - 指出其他 reviewer 论点中的漏洞、缺失的上下文或错误的假设。
-  - 改变立场可以，但仅限于对方给出了你无法反驳的、基于代码的具体论据——而不是因为对方说得自信。
-  - 如果你在审查对方论据的过程中发现了新问题，也要提出来。
+  Debate rules:
+  - Do not concede a point just to end the debate. If you believe your position is correct, defend it with concrete evidence from the code.
+  - Point out gaps, missing context, or flawed assumptions in other reviewers' arguments.
+  - Changing your stance is acceptable, but only when the other party presents irrefutable, code-based evidence you cannot counter — not simply because they sound confident.
+  - If you discover new issues while examining the other party's arguments, raise them as well.

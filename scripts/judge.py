@@ -56,12 +56,12 @@ def run_hard_judge(config, manifest, force=False):
 
     total = len(tasks)
     if total == 0:
-        print(f"[裁判-硬分] 无需执行 ({skipped} 个已跳过)")
+        print(f"[Judge-Hard] nothing to do ({skipped} skipped)")
         return
 
-    print_phase_start("裁判-硬分", total + skipped, concurrency)
+    print_phase_start("Judge-Hard", total + skipped, concurrency)
     if skipped > 0:
-        print(f"[裁判-硬分] 其中 {skipped} 个已有结果，跳过")
+        print(f"[Judge-Hard] {skipped} result(s) exist, skipped")
 
     phase_start = time.time()
 
@@ -94,14 +94,14 @@ def run_hard_judge(config, manifest, force=False):
             i, pr, bug, reviewed_model, judge_model = futures[future]
             exc = future.exception()
             if exc:
-                print(f"  [错误] {pr['id']}: {reviewed_model['id']} by {judge_model['id']}: {exc}")
+                print(f"  [ERROR] {pr['id']}: {reviewed_model['id']} by {judge_model['id']}: {exc}")
                 continue
 
             result = future.result()
             verdict = result.get("verdict", "UNKNOWN")
             print(
-                f"[裁判-硬分] [{i}/{total}] {pr['id']}: "
-                f"{reviewed_model['id']}的review → 裁判{judge_model['id']} ... {verdict}"
+                f"[Judge-Hard] [{i}/{total}] {pr['id']}: "
+                f"{reviewed_model['id']} review -> judge {judge_model['id']} ... {verdict}"
             )
 
             key = (pr["id"], bug["id"], reviewed_model["id"])
@@ -110,7 +110,7 @@ def run_hard_judge(config, manifest, force=False):
             results_by_key[key].append((judge_model["id"], verdict))
 
     # Print majority vote results
-    print(f"\n[裁判-硬分] === 最终判定 ===")
+    print(f"\n[Judge-Hard] === Final Verdicts ===")
     for (pr_id, bug_id, model_id), votes in sorted(results_by_key.items()):
         yes_count = sum(1 for _, v in votes if v.upper() == "YES")
         total_votes = len(votes)
@@ -132,7 +132,7 @@ def run_hard_judge(config, manifest, force=False):
         }
     save_json(verdicts_path, verdicts)
 
-    print_phase_end("裁判-硬分", total, time.time() - phase_start)
+    print_phase_end("Judge-Hard", total, time.time() - phase_start)
 
 
 def _create_anonymous_mapping(model_ids):
@@ -181,12 +181,12 @@ def run_soft_judge(config, manifest, force=False):
 
     total = len(tasks)
     if total == 0:
-        print(f"[裁判-软分] 无需执行 ({skipped} 个已跳过)")
+        print(f"[Judge-Soft] nothing to do ({skipped} skipped)")
         return
 
-    print_phase_start("裁判-软分", total + skipped, concurrency)
+    print_phase_start("Judge-Soft", total + skipped, concurrency)
     if skipped > 0:
-        print(f"[裁判-软分] 其中 {skipped} 个已有结果，跳过")
+        print(f"[Judge-Soft] {skipped} result(s) exist, skipped")
 
     phase_start = time.time()
 
@@ -256,12 +256,12 @@ def run_soft_judge(config, manifest, force=False):
             i, pr, judge_model = futures[future]
             exc = future.exception()
             if exc:
-                print(f"  [错误] {pr['id']} → 裁判{judge_model['id']}: {exc}")
+                print(f"  [ERROR] {pr['id']} -> judge {judge_model['id']}: {exc}")
                 continue
 
             result = future.result()
             if result and "scores" in result:
-                print(f"[裁判-软分] [{i}/{total}] {pr['id']} → 裁判{judge_model['id']} ...")
+                print(f"[Judge-Soft] [{i}/{total}] {pr['id']} -> judge {judge_model['id']} ...")
                 for reviewer_label, scores in result["scores"].items():
                     dim_strs = []
                     for d in dimensions:
@@ -269,4 +269,4 @@ def run_soft_judge(config, manifest, force=False):
                         dim_strs.append(f"{d['name']}={val}")
                     print(f"  {reviewer_label}: {', '.join(dim_strs)}")
 
-    print_phase_end("裁判-软分", total, time.time() - phase_start)
+    print_phase_end("Judge-Soft", total, time.time() - phase_start)

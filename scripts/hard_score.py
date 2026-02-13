@@ -39,26 +39,26 @@ def run_hard_score(config, manifest, pr_filter=None, model_filter=None, force=Fa
         for model in models:
             output_path = RESULTS_DIR / "hard" / pr["id"] / f"{model['id']}.json"
             if not force and result_exists(output_path):
-                print_progress("硬分", 0, 0, pr["id"], model["id"], "跳过")
+                print_progress("Hard", 0, 0, pr["id"], model["id"], "skipped")
                 skipped += 1
                 continue
             tasks.append((pr, model, output_path))
 
     total = len(tasks)
     if total == 0:
-        print(f"[硬分] 无需执行 ({skipped} 个已跳过)")
+        print(f"[Hard] nothing to do ({skipped} skipped)")
         return
 
-    print_phase_start("硬分", total + skipped, concurrency)
+    print_phase_start("Hard", total + skipped, concurrency)
     if skipped > 0:
-        print(f"[硬分] 其中 {skipped} 个已有结果，跳过")
+        print(f"[Hard] {skipped} result(s) exist, skipped")
 
     phase_start = time.time()
     completed_count = 0
 
     def run_one(index, pr, model, output_path):
         """Run a single hard score task."""
-        print_progress("硬分", index, total, pr["id"], model["id"], "启动")
+        print_progress("Hard", index, total, pr["id"], model["id"], "started")
         start = time.time()
 
         # Generate config with only this model
@@ -72,9 +72,9 @@ def run_hard_score(config, manifest, pr_filter=None, model_filter=None, force=Fa
         elapsed = time.time() - start
 
         if result_exists(output_path):
-            print_progress("硬分", index, total, pr["id"], model["id"], "完成", elapsed)
+            print_progress("Hard", index, total, pr["id"], model["id"], "done", elapsed)
         else:
-            print_progress("硬分", index, total, pr["id"], model["id"], "失败", elapsed)
+            print_progress("Hard", index, total, pr["id"], model["id"], "failed", elapsed)
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         futures = {}
@@ -87,6 +87,6 @@ def run_hard_score(config, manifest, pr_filter=None, model_filter=None, force=Fa
             exc = future.exception()
             if exc:
                 i, pr, model = futures[future]
-                print(f"  [错误] {pr['id']} × {model['id']}: {exc}")
+                print(f"  [ERROR] {pr['id']} × {model['id']}: {exc}")
 
-    print_phase_end("硬分", total, time.time() - phase_start)
+    print_phase_end("Hard", total, time.time() - phase_start)
