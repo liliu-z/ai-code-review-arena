@@ -1,0 +1,118 @@
+prs:
+  # === Hard score: Original PRs that introduced bugs (Type A) ===
+
+  - id: pr-47154
+    url: "https://github.com/milvus-io/milvus/pull/47154"
+    category: hard
+    title: "Fast finish compaction when L0Comp hit zero L1/L2"
+    difficulty: L2
+    language: go
+    known_bugs:
+      - id: save-segment-meta
+        description: |
+          优化 compaction 提前退出逻辑时，改变了 saveSegmentMeta 的签名和语义。
+          当没有 L1/L2 segment 时返回空 plan 而非 error，但下游处理路径
+          未适配这一变化，导致 segment 元数据处理错误。
+
+  - id: pr-24358
+    url: "https://github.com/milvus-io/milvus/pull/24358"
+    category: hard
+    title: "Retrieve segments concurrently"
+    difficulty: L2
+    language: go
+    known_bugs:
+      - id: concurrent-segment-bug
+        description: |
+          将 segment 获取改为并发执行时引入竞争条件。多个 goroutine 同时访问
+          共享状态但缺少适当的同步机制，导致数据不一致。
+
+  - id: pr-44324
+    url: "https://github.com/milvus-io/milvus/pull/44324"
+    category: hard
+    title: "Encode cluster id in auto id"
+    difficulty: L2
+    language: go
+    known_bugs:
+      - id: id-format-compat
+        description: |
+          修改自增 ID 生成格式以编码 cluster ID，但未处理与旧格式 ID 的
+          兼容性问题，导致已有数据的 ID 查找失败。
+
+  - id: pr-43937
+    url: "https://github.com/milvus-io/milvus/pull/43937"
+    category: hard
+    title: "Use folly::SharedMutex preventing starvation"
+    difficulty: L2
+    language: cpp
+    known_bugs:
+      - id: folly-mutex-semantic
+        description: |
+          将 std::shared_mutex 批量替换为 folly::SharedMutex，但 folly 版本
+          的锁语义与标准库不同（如升级/降级行为），导致并发问题。
+
+  - id: pr-43542
+    url: "https://github.com/milvus-io/milvus/pull/43542"
+    category: hard
+    title: "DataCodec release ownership of input_data"
+    difficulty: L1
+    language: cpp
+    known_bugs:
+      - id: lifetime-issue
+        description: |
+          删除了 3 行释放 input_data 所有权的代码，导致对象生命周期管理
+          出错，input_data 被提前释放，后续访问导致 use-after-free。
+
+  - id: pr-35720
+    url: "https://github.com/milvus-io/milvus/pull/35720"
+    category: hard
+    title: "Avoid coexistence of old coordinator and new node"
+    difficulty: L2
+    language: go
+    known_bugs:
+      - id: blocking-logic
+        description: |
+          在滚动升级时添加阻塞逻辑防止新旧节点共存，但阻塞条件设计有误，
+          在特定升级顺序下导致节点启动永久阻塞。
+
+  - id: pr-46440
+    url: "https://github.com/milvus-io/milvus/pull/46440"
+    category: hard
+    title: "Unify RO node handling to avoid balance channel task stuck"
+    difficulty: L3
+    language: go
+    known_bugs:
+      - id: check-stale-wrong-node
+        description: |
+          统一 checkStale 方法时，对所有 action 类型使用 action.Node() 检查状态。
+          但 LeaderAction 的 Node() 返回 worker 节点而非 leader 节点（delegator），
+          导致从 RO worker 同步 segment 到 RW delegator 的任务被错误标记为 stale。
+
+  - id: pr-38300
+    url: "https://github.com/milvus-io/milvus/pull/38300"
+    category: hard
+    title: "Query coord stop progress is too slow"
+    difficulty: L3
+    language: go
+    known_bugs:
+      - id: qc-stop-regression
+        description: |
+          优化 10k+ collection 场景下 QueryCoord 关停速度，改动分散在 24 个文件，
+          删除了部分必要的清理逻辑，导致关停后资源未正确释放。
+
+  # === Soft score: Normal quality PRs (no known bugs) ===
+
+  - id: pr-47387
+    url: "https://github.com/milvus-io/milvus/pull/47387"
+    category: soft
+    title: "更新向量字段默认 auto index"
+    difficulty: null
+    language: go
+    known_bugs: []
+
+  - id: pr-47032
+    url: "https://github.com/milvus-io/milvus/pull/47032"
+    category: soft
+    title: "支持 truncate collection REST API v2"
+    difficulty: null
+    language: go
+    known_bugs: []

@@ -1,0 +1,42 @@
+models:
+  - id: claude
+    magpie_provider: claude-code
+    judge_cmd: "claude -p '{prompt_file}'"
+  - id: gemini
+    magpie_provider: gemini-cli
+    judge_cmd: "gemini '{prompt_file}'"
+  - id: codex
+    magpie_provider: codex-cli
+    judge_cmd: "codex exec '{prompt_file}'"
+
+execution:
+  concurrency: 4
+
+hard_score:
+  rounds: 1
+
+soft_score:
+  rounds: 5
+  check_convergence: true
+
+judge:
+  dimensions:
+    - id: accuracy
+      name: "问题识别准确性"
+    - id: actionability
+      name: "建议可操作性"
+    - id: depth
+      name: "分析深度"
+    - id: clarity
+      name: "表达清晰度"
+  scale: [1, 10]
+
+# Review prompt injected into Magpie config for all reviewers
+review_prompt: |
+  你是一个严格的高级工程师，正在 review 这个 PR。像 Linus Torvalds 一样直接、严格、有建设性。
+
+  辩论规则：
+  - 不要为了结束辩论而同意。如果你认为自己的观点是对的，用代码中的具体证据来捍卫它。
+  - 指出其他 reviewer 论点中的漏洞、缺失的上下文或错误的假设。
+  - 改变立场可以，但仅限于对方给出了你无法反驳的、基于代码的具体论据——而不是因为对方说得自信。
+  - 如果你在审查对方论据的过程中发现了新问题，也要提出来。

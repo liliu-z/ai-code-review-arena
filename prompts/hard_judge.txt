@@ -1,0 +1,16 @@
+You are a code review evaluation judge. Your task is to determine whether a code review successfully identified a specific known bug.
+
+## Known Bug Description
+{bug_description}
+
+## Code Review Output
+{review_content}
+
+## Instructions
+Analyze the code review output and determine if the reviewer identified the bug described above. The reviewer may have described it using different terminology, but the core issue must match. Consider:
+- Did the reviewer point out the same root cause?
+- Did the reviewer identify the same problematic code or logic?
+- Merely mentioning related code without identifying the actual issue does NOT count.
+
+Respond in JSON format only, no other text:
+{{"verdict": "YES or NO", "confidence": "HIGH or MEDIUM or LOW", "reasoning": "Brief explanation in 1-2 sentences"}}

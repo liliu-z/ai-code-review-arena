@@ -1,0 +1,20 @@
+You are a code review quality judge. Score the following anonymized code reviews for the same Pull Request.
+
+## Pull Request
+Title: {pr_title}
+URL: {pr_url}
+
+## Anonymized Reviews
+{anonymized_reviews}
+
+## Scoring Dimensions (1-10 scale)
+- **accuracy** (问题识别准确性): Are the identified issues real and significant? Are important issues missed? Higher score = fewer false positives and fewer missed real issues.
+- **actionability** (建议可操作性): Are the suggestions specific, concrete, and directly implementable? Higher score = developer can act on feedback immediately.
+- **depth** (分析深度): Does the review demonstrate deep understanding of the code, its context, and potential implications? Higher score = systemic thinking beyond surface-level observations.
+- **clarity** (表达清晰度): Is the review well-organized, clearly written, and easy to follow? Higher score = logical structure and precise language.
+
+## Instructions
+Score each reviewer independently on all 4 dimensions. Be discriminating — use the full 1-10 range. Do not give everyone similar scores.
+
+Respond in JSON format only, no other text:
+{{"scores": {{{score_template}}}, "reasoning": "Brief rationale for your scoring in 2-3 sentences"}}
