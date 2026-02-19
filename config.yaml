@@ -1,16 +1,23 @@
 models:
   - id: claude
     magpie_provider: claude-code
-    judge_cmd: "claude -p"
+    judge_cmd: "claude -p - --dangerously-skip-permissions"
   - id: gemini
     magpie_provider: gemini-cli
-    judge_cmd: "gemini"
+    judge_cmd: "gemini -y"
   - id: codex
     magpie_provider: codex-cli
-    judge_cmd: "codex exec -"
+    judge_cmd: "codex exec - --dangerously-bypass-approvals-and-sandbox"
+  - id: minimax
+    magpie_provider: minimax
+    judge_cmd: "minimax-api"
+    api_key: "${MINIMAX_API_KEY}"
+  - id: qwen
+    magpie_provider: qwen-code
+    judge_cmd: "qwen -p '' -y --max-session-turns 10 --output-format text"
 
 execution:
-  concurrency: 4
+  concurrency: 5
 
 hard_score:
   rounds: 1
@@ -34,6 +41,15 @@ judge:
 # Review prompt injected into Magpie config for all reviewers
 review_prompt: |
   You are a strict senior engineer reviewing this PR. Be direct, rigorous, and constructive — in the style of Linus Torvalds.
+
+  IMPORTANT RULES — strict compliance required:
+  - You MUST only analyze the PR diff as submitted. Fetch the diff from the PR URL provided.
+  - Do NOT run git checkout, git log, git blame, or any git commands on any repository.
+  - Do NOT browse the GitHub repository beyond the PR URL provided.
+  - Do NOT look at or reference the current main/master branch code.
+  - Do NOT reference any revert, fix, hotfix, or follow-up PRs.
+  - Do NOT mention whether this PR was later reverted or fixed.
+  - Base your review SOLELY on the code changes visible in the PR diff.
 
   Debate rules:
   - Do not concede a point just to end the debate. If you believe your position is correct, defend it with concrete evidence from the code.

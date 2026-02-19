@@ -1,5 +1,7 @@
 You are a code review quality judge. Score the following anonymized code reviews for the same Pull Request.
 
+IMPORTANT: These reviews have been anonymized. Do NOT attempt to identify who wrote each review. Judge purely on the technical merit of the content. Do not let writing style, tone, or formatting influence your assessment — focus only on the substance: correctness of claims, depth of analysis, and quality of suggestions.
+
 ## Pull Request
 Title: {pr_title}
 URL: {pr_url}

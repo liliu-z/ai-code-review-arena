@@ -10,6 +10,14 @@ from pathlib import Path
 from scripts.common import RESULTS_DIR, load_json, save_json
 
 
+# Per-model modes (each model judged individually)
+PER_MODEL_MODES = ["raw", "r1", "r1_nocontext"]
+# Debate modes (judged as one collaborative unit)
+DEBATE_MODES = ["debate", "debate_nocontext"]
+# All modes
+REVIEW_MODES = PER_MODEL_MODES + DEBATE_MODES
+
+
 def run_report(config, manifest):
     """Generate reports from all results."""
     reports_dir = RESULTS_DIR / "reports"
@@ -28,41 +36,69 @@ def run_report(config, manifest):
 
 
 def _generate_hard_report(config, manifest, reports_dir):
-    """Generate hard score report: bug detection rates by model and difficulty."""
+    """Generate hard score report: bug detection rates by mode, model, and difficulty.
+
+    Per-model modes (raw, r1, r1_nocontext): per-model detection rates.
+    Debate modes (debate, debate_nocontext): overall detection rate (one score).
+    """
     hard_prs = [p for p in manifest["prs"] if p["category"] == "hard"]
     models = config["models"]
 
-    # Load verdicts
-    verdicts_path = RESULTS_DIR / "judge" / "hard" / "verdicts.json"
+    verdicts_path = RESULTS_DIR / "judge" / "verdicts.json"
     if not verdicts_path.exists():
         print("[Report] skipped hard score report (no judge results)")
         return {}
 
     verdicts = load_json(verdicts_path)
 
-    # Build CSV rows and summary
     rows = []
-    summary = defaultdict(lambda: defaultdict(lambda: {"found": 0, "total": 0}))
+    # For per-model modes: summary[mode][model_id][difficulty] = {found, total}
+    summary = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {"found": 0, "total": 0})))
+    # For debate modes: debate_summary[mode][difficulty] = {found, total}
+    debate_summary = defaultdict(lambda: defaultdict(lambda: {"found": 0, "total": 0}))
 
-    for pr in hard_prs:
-        difficulty = pr.get("difficulty", "unknown")
-        for bug in pr.get("known_bugs", []):
-            for model in models:
-                key = f"{pr['id']}/{bug['id']}/{model['id']}"
+    for mode in PER_MODEL_MODES:
+        for pr in hard_prs:
+            difficulty = pr.get("difficulty", "unknown")
+            for bug in pr.get("known_bugs", []):
+                for model in models:
+                    key = f"{mode}/{pr['id']}/{bug['id']}/{model['id']}"
+                    v = verdicts.get(key, {})
+                    if not v:
+                        continue
+                    found = v.get("found", False)
+                    rows.append({
+                        "mode": mode,
+                        "model": model["id"],
+                        "pr_id": pr["id"],
+                        "bug_id": bug["id"],
+                        "difficulty": difficulty,
+                        "found": found,
+                    })
+                    summary[mode][model["id"]][difficulty]["total"] += 1
+                    if found:
+                        summary[mode][model["id"]][difficulty]["found"] += 1
+
+    for mode in DEBATE_MODES:
+        for pr in hard_prs:
+            difficulty = pr.get("difficulty", "unknown")
+            for bug in pr.get("known_bugs", []):
+                key = f"{mode}/{pr['id']}/{bug['id']}/debate"
                 v = verdicts.get(key, {})
+                if not v:
+                    continue
                 found = v.get("found", False)
                 rows.append({
-                    "model": model["id"],
+                    "mode": mode,
+                    "model": "debate",
                     "pr_id": pr["id"],
                     "bug_id": bug["id"],
                     "difficulty": difficulty,
                     "found": found,
-                    "yes_votes": v.get("yes_count", 0),
-                    "total_votes": v.get("total_votes", 0),
                 })
-                summary[model["id"]][difficulty]["total"] += 1
+                debate_summary[mode][difficulty]["total"] += 1
                 if found:
-                    summary[model["id"]][difficulty]["found"] += 1
+                    debate_summary[mode][difficulty]["found"] += 1
 
     # Write CSV
     csv_path = reports_dir / "hard_scores.csv"
@@ -73,15 +109,43 @@ def _generate_hard_report(config, manifest, reports_dir):
             writer.writerows(rows)
         print(f"  Hard score details: {csv_path}")
 
-    # Write summary JSON
+    # Build summary_data combining both per-model and debate
     summary_data = {}
-    for model_id, by_diff in summary.items():
-        model_summary = {}
+
+    for mode in PER_MODEL_MODES:
+        for model_id, by_diff in summary[mode].items():
+            mode_model_key = f"{mode}/{model_id}"
+            model_summary = {"mode": mode, "model": model_id}
+            total_found = 0
+            total_total = 0
+            for diff, counts in by_diff.items():
+                rate = counts["found"] / counts["total"] if counts["total"] > 0 else 0
+                model_summary[diff] = {
+                    "found": counts["found"],
+                    "total": counts["total"],
+                    "rate": round(rate, 2),
+                }
+                total_found += counts["found"]
+                total_total += counts["total"]
+            overall_rate = total_found / total_total if total_total > 0 else 0
+            model_summary["overall"] = {
+                "found": total_found,
+                "total": total_total,
+                "rate": round(overall_rate, 2),
+            }
+            summary_data[mode_model_key] = model_summary
+
+    for mode in DEBATE_MODES:
+        by_diff = debate_summary[mode]
+        if not by_diff:
+            continue
+        mode_key = f"{mode}/debate"
+        mode_summary = {"mode": mode, "model": "debate"}
         total_found = 0
         total_total = 0
         for diff, counts in by_diff.items():
             rate = counts["found"] / counts["total"] if counts["total"] > 0 else 0
-            model_summary[diff] = {
+            mode_summary[diff] = {
                 "found": counts["found"],
                 "total": counts["total"],
                 "rate": round(rate, 2),
@@ -89,12 +153,12 @@ def _generate_hard_report(config, manifest, reports_dir):
             total_found += counts["found"]
             total_total += counts["total"]
         overall_rate = total_found / total_total if total_total > 0 else 0
-        model_summary["overall"] = {
+        mode_summary["overall"] = {
             "found": total_found,
             "total": total_total,
             "rate": round(overall_rate, 2),
         }
-        summary_data[model_id] = model_summary
+        summary_data[mode_key] = mode_summary
 
     save_json(reports_dir / "hard_summary.json", summary_data)
     print(f"  Hard score summary: {reports_dir / 'hard_summary.json'}")
@@ -107,13 +171,10 @@ def _generate_soft_report(config, manifest, reports_dir):
     models = config["models"]
     dimensions = config["judge"]["dimensions"]
 
-    # Collect all scores
     rows = []
-    # scores_by_model[real_model_id][dimension] = [scores...]
     scores_by_model = defaultdict(lambda: defaultdict(list))
 
     for pr in all_prs:
-        # Load mapping to de-anonymize
         mapping_path = RESULTS_DIR / "judge" / "soft" / pr["id"] / "mapping.json"
         if not mapping_path.exists():
             continue
@@ -142,7 +203,6 @@ def _generate_soft_report(config, manifest, reports_dir):
                         })
                         scores_by_model[real_model][dim_id].append(score)
 
-    # Write CSV
     csv_path = reports_dir / "soft_scores.csv"
     if rows:
         with open(csv_path, "w", newline="") as f:
@@ -151,7 +211,6 @@ def _generate_soft_report(config, manifest, reports_dir):
             writer.writerows(rows)
         print(f"  Soft score details: {csv_path}")
 
-    # Write summary JSON
     summary_data = {}
     for model_id, by_dim in scores_by_model.items():
         model_summary = {}
@@ -163,7 +222,6 @@ def _generate_soft_report(config, manifest, reports_dir):
                 "max": max(score_list) if score_list else 0,
                 "count": len(score_list),
             }
-        # Overall average across all dimensions
         all_scores = [s for sl in by_dim.values() for s in sl]
         model_summary["overall"] = round(sum(all_scores) / len(all_scores), 2) if all_scores else 0
         summary_data[model_id] = model_summary
@@ -177,10 +235,7 @@ def _generate_bias_report(config, manifest, reports_dir):
     """Generate judge bias report: does each model score itself higher?"""
     all_prs = manifest["prs"]
     models = config["models"]
-    dimensions = config["judge"]["dimensions"]
 
-    # self_scores[judge_id] = [scores when judging self]
-    # other_scores[judge_id] = [scores when judging others]
     self_scores = defaultdict(list)
     other_scores = defaultdict(list)
 
@@ -203,17 +258,17 @@ def _generate_bias_report(config, manifest, reports_dir):
                 all_dim_scores = [v for v in dim_scores.values() if isinstance(v, (int, float))]
                 avg = sum(all_dim_scores) / len(all_dim_scores) if all_dim_scores else 0
 
-                # Is judge scoring itself (via magpie_provider matching)?
                 judge_provider = judge_model["magpie_provider"]
                 if real_model == judge_provider or real_model == judge_model["id"]:
                     self_scores[judge_model["id"]].append(avg)
                 else:
                     other_scores[judge_model["id"]].append(avg)
 
-    # Build bias summary
     bias_data = {}
     for model in models:
         mid = model["id"]
+        if not self_scores[mid] and not other_scores[mid]:
+            continue
         self_avg = sum(self_scores[mid]) / len(self_scores[mid]) if self_scores[mid] else 0
         other_avg = sum(other_scores[mid]) / len(other_scores[mid]) if other_scores[mid] else 0
         bias = self_avg - other_avg
@@ -232,30 +287,52 @@ def _generate_bias_report(config, manifest, reports_dir):
 
 def _generate_text_summary(config, manifest, reports_dir, hard_summary, soft_summary, bias_summary):
     """Generate human-readable summary."""
+    models = config["models"]
     lines = []
-    lines.append("=" * 60)
+    lines.append("=" * 70)
     lines.append("AI Code Review Arena - Evaluation Results Summary")
-    lines.append("=" * 60)
+    lines.append("=" * 70)
 
-    # Hard scores
     if hard_summary:
-        lines.append("\n## Hard Score: Bug Detection Rate")
-        lines.append(f"{'Model':<12} {'L1':<10} {'L2':<10} {'L3':<10} {'Total':<10}")
-        lines.append("-" * 52)
-        for model_id, by_diff in hard_summary.items():
-            l1 = by_diff.get("L1", {})
-            l2 = by_diff.get("L2", {})
-            l3 = by_diff.get("L3", {})
-            overall = by_diff.get("overall", {})
+        # Per-model modes
+        lines.append("\n## Hard Score: Bug Detection Rate (Per-Model Modes)")
+        lines.append(f"{'Mode':<16} {'Model':<10} {'L2':<8} {'L3':<8} {'Total':<8}")
+        lines.append("-" * 56)
+        for mode in PER_MODEL_MODES:
+            for model in models:
+                key = f"{mode}/{model['id']}"
+                data = hard_summary.get(key, {})
+                if not data:
+                    continue
+                l2 = data.get("L2", {})
+                l3 = data.get("L3", {})
+                overall = data.get("overall", {})
+                lines.append(
+                    f"{mode:<16} {model['id']:<10} "
+                    f"{l2.get('found', 0)}/{l2.get('total', 0):<5} "
+                    f"{l3.get('found', 0)}/{l3.get('total', 0):<5} "
+                    f"{overall.get('rate', 0):.0%}"
+                )
+
+        # Debate modes
+        lines.append(f"\n## Hard Score: Bug Detection Rate (Debate Modes)")
+        lines.append(f"{'Mode':<24} {'L2':<8} {'L3':<8} {'Total':<8}")
+        lines.append("-" * 48)
+        for mode in DEBATE_MODES:
+            key = f"{mode}/debate"
+            data = hard_summary.get(key, {})
+            if not data:
+                continue
+            l2 = data.get("L2", {})
+            l3 = data.get("L3", {})
+            overall = data.get("overall", {})
             lines.append(
-                f"{model_id:<12} "
-                f"{l1.get('found', 0)}/{l1.get('total', 0):<7} "
-                f"{l2.get('found', 0)}/{l2.get('total', 0):<7} "
-                f"{l3.get('found', 0)}/{l3.get('total', 0):<7} "
+                f"{mode:<24} "
+                f"{l2.get('found', 0)}/{l2.get('total', 0):<5} "
+                f"{l3.get('found', 0)}/{l3.get('total', 0):<5} "
                 f"{overall.get('rate', 0):.0%}"
             )
 
-    # Soft scores
     if soft_summary:
         lines.append("\n## Soft Score: Review Quality Rating (1-10)")
         dims = config["judge"]["dimensions"]
@@ -271,7 +348,6 @@ def _generate_text_summary(config, manifest, reports_dir, hard_summary, soft_sum
             parts.append(f" {overall:<6.1f}")
             lines.append("".join(parts))
 
-    # Bias
     if bias_summary:
         lines.append("\n## Judge Bias Analysis (Self Score - Others Score)")
         lines.append(f"{'Model':<12} {'Self Avg':<10} {'Other Avg':<10} {'Bias':<8}")
@@ -285,14 +361,11 @@ def _generate_text_summary(config, manifest, reports_dir, hard_summary, soft_sum
                 f"{sign}{bias['bias']:.1f}"
             )
 
-    lines.append("\n" + "=" * 60)
+    lines.append("\n" + "=" * 70)
 
     summary_text = "\n".join(lines)
-
-    # Print to stdout
     print(summary_text)
 
-    # Save to file
     with open(reports_dir / "summary.txt", "w") as f:
         f.write(summary_text)
     print(f"\n  Summary text: {reports_dir / 'summary.txt'}")

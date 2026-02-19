@@ -1,98 +1,68 @@
 prs:
   # === Hard score: Original PRs that introduced bugs (Type A) ===
+  # All PRs below are "clean" — their GitHub pages have NO fix/revert cross-references,
+  # preventing AI models from cheating by seeing post-merge fix information.
+  # 15 PRs selected for meaningful difficulty distribution.
 
-  - id: pr-47154
-    url: "https://github.com/milvus-io/milvus/pull/47154"
-    category: hard
-    title: "Fast finish compaction when L0Comp hit zero L1/L2"
-    difficulty: L2
-    language: go
-    known_bugs:
-      - id: save-segment-meta
-        description: |
-          While optimizing the early-exit logic for compaction, the signature and semantics
-          of saveSegmentMeta were changed. It now returns an empty plan instead of an error
-          when there are no L1/L2 segments, but downstream processing paths were not updated
-          to handle this change, causing segment metadata processing errors.
+  # --- L3 difficulty (system-level understanding required) ---
 
-  - id: pr-24358
-    url: "https://github.com/milvus-io/milvus/pull/24358"
+  - id: pr-44474
+    url: "https://github.com/milvus-io/milvus/pull/44474"
     category: hard
-    title: "Retrieve segments concurrently"
-    difficulty: L2
-    language: go
-    known_bugs:
-      - id: concurrent-segment-bug
-        description: |
-          A race condition was introduced when segment retrieval was changed to run
-          concurrently. Multiple goroutines access shared state simultaneously without
-          proper synchronization, leading to data inconsistency.
-
-  - id: pr-44324
-    url: "https://github.com/milvus-io/milvus/pull/44324"
-    category: hard
-    title: "Encode cluster id in auto id"
-    difficulty: L2
-    language: go
-    known_bugs:
-      - id: id-format-compat
-        description: |
-          The auto-increment ID generation format was modified to encode the cluster ID,
-          but backward compatibility with the old ID format was not handled, causing ID
-          lookups on existing data to fail.
-
-  - id: pr-43937
-    url: "https://github.com/milvus-io/milvus/pull/43937"
-    category: hard
-    title: "Use folly::SharedMutex preventing starvation"
-    difficulty: L2
+    title: "Optimize lazy get pk"
+    difficulty: L3
     language: cpp
+    bug_type: lifecycle
     known_bugs:
-      - id: folly-mutex-semantic
+      - id: lazy-pk-lifecycle
         description: |
-          std::shared_mutex was bulk-replaced with folly::SharedMutex, but the folly
-          version has different lock semantics compared to the standard library (e.g.,
-          upgrade/downgrade behavior), causing concurrency issues.
+          Lazy PK fetching leaves primary_keys_ partially populated. Positions
+          that don't survive reduce phase have default/zero PKs, breaking
+          downstream SearchResultPair::advance() contract.
 
-  - id: pr-43542
-    url: "https://github.com/milvus-io/milvus/pull/43542"
+  - id: pr-43321
+    url: "https://github.com/milvus-io/milvus/pull/43321"
     category: hard
-    title: "DataCodec release ownership of input_data"
-    difficulty: L1
+    title: "Align null bitmap offset when loading multi-chunk"
+    difficulty: L3
     language: cpp
+    bug_type: logic
     known_bugs:
-      - id: lifetime-issue
+      - id: bitmap-dislocation
         description: |
-          Three lines of code that released ownership of input_data were removed, causing
-          incorrect object lifetime management. input_data is freed prematurely, and
-          subsequent access results in a use-after-free.
+          null_bitmap_data() points to start of entire row group, not current
+          arrow::Array. When array->offset() is non-zero, bitmap reads from
+          wrong position, corrupting nullable field data.
 
-  - id: pr-35720
-    url: "https://github.com/milvus-io/milvus/pull/35720"
+  - id: pr-41009
+    url: "https://github.com/milvus-io/milvus/pull/41009"
     category: hard
-    title: "Avoid coexistence of old coordinator and new node"
-    difficulty: L2
-    language: go
-    known_bugs:
-      - id: blocking-logic
-        description: |
-          Blocking logic was added during rolling upgrades to prevent coexistence of old
-          and new nodes, but the blocking condition was incorrectly designed, causing
-          permanent node startup blocking under certain upgrade sequences.
-
-  - id: pr-46440
-    url: "https://github.com/milvus-io/milvus/pull/46440"
-    category: hard
-    title: "Unify RO node handling to avoid balance channel task stuck"
+    title: "Correctly parse the minimum value of int64"
     difficulty: L3
     language: go
+    bug_type: semantic
     known_bugs:
-      - id: check-stale-wrong-node
+      - id: antlr-grammar-priority
         description: |
-          When unifying the checkStale method, action.Node() was used to check status for
-          all action types. However, LeaderAction's Node() returns the worker node rather
-          than the leader node (delegator), causing tasks that sync segments from RO workers
-          to RW delegators to be incorrectly marked as stale.
+          Added optional sign prefix to IntegerConstant/FloatingConstant in
+          Plan.g4 ANTLR grammar. This breaks expression parsing priority:
+          `float < -2**8` is parsed as `float < (-2)**8 = 256` instead of
+          `float < -(2**8) = -256`. Only 2 lines changed in grammar file.
+
+  - id: pr-44418
+    url: "https://github.com/milvus-io/milvus/pull/44418"
+    category: hard
+    title: "Make datanode use non-singleton fs"
+    difficulty: L3
+    language: cpp
+    bug_type: concurrency
+    known_bugs:
+      - id: tbb-concurrent-map-race
+        description: |
+          StorageV2FSCache uses tbb::concurrent_hash_map. Get() does emplace()
+          then find(), but between these two operations another thread can erase
+          the entry. Combined operations on concurrent containers are NOT atomic
+          even if individual operations are thread-safe, causing deadlock.
 
   - id: pr-38300
     url: "https://github.com/milvus-io/milvus/pull/38300"
@@ -100,12 +70,150 @@ prs:
     title: "Query coord stop progress is too slow"
     difficulty: L3
     language: go
+    bug_type: lifecycle
     known_bugs:
       - id: qc-stop-regression
         description: |
-          QueryCoord shutdown speed was optimized for scenarios with 10k+ collections.
-          The changes were spread across 24 files, and some necessary cleanup logic was
-          removed, causing resources to not be properly released after shutdown.
+          QueryCoord shutdown optimized across 24 files, but necessary cleanup
+          logic removed, causing resource leak after shutdown.
+
+  # --- L2 difficulty (context understanding required) ---
+
+  - id: pr-44324
+    url: "https://github.com/milvus-io/milvus/pull/44324"
+    category: hard
+    title: "Encode cluster id in auto id"
+    difficulty: L2
+    language: go
+    bug_type: compatibility
+    known_bugs:
+      - id: id-format-compat
+        description: |
+          Auto-increment ID format changed to encode cluster ID, but backward
+          compatibility with old ID format not handled.
+
+  - id: pr-44232
+    url: "https://github.com/milvus-io/milvus/pull/44232"
+    category: hard
+    title: "Make bucket name concatenation transparent to user"
+    difficulty: L2
+    language: go
+    bug_type: compatibility
+    known_bugs:
+      - id: azure-blob-compat
+        description: |
+          Bucket name concatenation delegated to milvus-storage library, which
+          handles S3 but NOT Azure Blob Storage. Breaks all Azure deployments.
+
+  - id: pr-41309
+    url: "https://github.com/milvus-io/milvus/pull/41309"
+    category: hard
+    title: "Support scan mode for like with inverted index"
+    difficulty: L2
+    language: cpp
+    bug_type: missing_check
+    known_bugs:
+      - id: missing-canuse-check
+        description: |
+          CanUseIndexForJson() missing pre-condition check on CanUseIndex().
+          When base conditions not met, directly using index produces wrong
+          query results. Only 32 lines changed.
+
+  - id: pr-28570
+    url: "https://github.com/milvus-io/milvus/pull/28570"
+    category: hard
+    title: "ChannelCheckpointUpdater"
+    difficulty: L2
+    language: go
+    bug_type: concurrency
+    known_bugs:
+      - id: toctou-lock-gap
+        description: |
+          TOCTOU race: getTask() uses RLock, AddTask() uses Lock. Between
+          RLock release and Lock acquisition, updateCheckpoints() can delete
+          the task, causing duplicate callbacks or state inconsistency.
+
+  - id: pr-42484
+    url: "https://github.com/milvus-io/milvus/pull/42484"
+    category: hard
+    title: "Make json index compatible with caching layer"
+    difficulty: L2
+    language: cpp
+    bug_type: missing_check
+    known_bugs:
+      - id: json-index-path-check-removed
+        description: |
+          HasJsonIndex() refactored: removed `index.nested_path == path` check.
+          Now any JSON index matches any nested path. Causes query node crash
+          when wrong index is used for a different JSON path.
+
+  - id: pr-46814
+    url: "https://github.com/milvus-io/milvus/pull/46814"
+    category: hard
+    title: "Optimize ngram inverted index by using previous filter expression result"
+    difficulty: L2
+    language: cpp
+    bug_type: logic
+    known_bugs:
+      - id: bitset-size-mismatch
+        description: |
+          Pre-filter bitset sized to batch_size passed to ngram index which
+          expects segment-sized bitset. Size mismatch causes wrong query results.
+
+  - id: pr-36734
+    url: "https://github.com/milvus-io/milvus/pull/36734"
+    category: hard
+    title: "Pre-allocate segmentIDs for compaction"
+    difficulty: L2
+    language: go
+    bug_type: missing_check
+    known_bugs:
+      - id: l0-preallocate-nil
+        description: |
+          PreAllocatedSegmentIDs nil check doesn't exclude L0 compaction type.
+          L0 compaction doesn't need pre-allocated segment IDs but is included
+          in the check, causing compaction task failure.
+
+  - id: pr-44762
+    url: "https://github.com/milvus-io/milvus/pull/44762"
+    category: hard
+    title: "Refactor privilege cache"
+    difficulty: L2
+    language: go
+    bug_type: missing_check
+    known_bugs:
+      - id: missing-rpc-check
+        description: |
+          After privilege cache refactor, merr.CheckRPCCall(resp, err) call
+          missing. RPC errors not properly checked, causing privilege
+          validation to silently fail.
+
+  - id: pr-45556
+    url: "https://github.com/milvus-io/milvus/pull/45556"
+    category: hard
+    title: "Add force merge"
+    difficulty: L2
+    language: go
+    bug_type: logic
+    known_bugs:
+      - id: unit-mismatch-mb-bytes
+        description: |
+          targetSize (in MB) compared directly with configMaxSize (in bytes).
+          compact(target_size=32) means 32MB=33554432 bytes, but compared as
+          32 < 16777216, causing legitimate requests to be rejected.
+
+  - id: pr-37012
+    url: "https://github.com/milvus-io/milvus/pull/37012"
+    category: hard
+    title: "Support db for bulkinsert"
+    difficulty: L2
+    language: go
+    bug_type: compatibility
+    known_bugs:
+      - id: db-isolation-zero-value
+        description: |
+          DB ID filtering added but Go protobuf zero-value semantics not handled.
+          Old clients with DbID=0 see jobs from ALL databases, breaking isolation.
 
   # === Soft score: Normal quality PRs (no known bugs) ===
 

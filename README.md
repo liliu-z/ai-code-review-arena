@@ -1,117 +1,143 @@
 # AI Code Review Arena
 
-A multi-AI-model code review arena: real Milvus PRs serve as the battleground where AI models review, debate, and anonymously score each other.
+Evaluate AI code review models on real bug-introducing PRs. Models review independently, debate collaboratively, then judge each other anonymously.
+
+Built on [Magpie](https://github.com/liliu-z/magpie) for multi-model orchestration. Test dataset: 15 PRs from [Milvus](https://github.com/milvus-io/milvus) with known bugs at L2/L3 difficulty.
 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+# Prerequisites: Python 3.10+, gh CLI, and model CLIs
+pip install pyyaml
 
-# 2. Ensure the following CLIs are installed
-magpie --version    # Magpie (npm install -g magpie)
-claude --version    # Claude Code CLI
-gemini --version    # Gemini CLI
-codex --version     # Codex CLI
+# Set up model CLIs
+# claude, gemini, codex, qwen — install per their docs
+# minimax — uses API directly, set MINIMAX_API_KEY env var
 
-# 3. Run everything
+# Clone a local copy of the target repo (for anti-cheat checkout)
+export MILVUS_REPO=~/milvus
+git clone https://github.com/milvus-io/milvus.git $MILVUS_REPO
+
+# Run the full pipeline
 python run.py
 ```
 
-## Evaluation Pipeline
+## Three Evaluation Modes
+
+| Mode | What it measures | How it works |
+|------|-----------------|-------------|
+| **Raw** | Bare model capability | Direct CLI call with PR URL, model fetches diff itself |
+| **R1** | Framework-assisted review | Magpie collects context, model reviews independently (1 round) |
+| **Debate** | Collaborative bug hunting | All models debate adversarially (5 rounds) |
+
+## Pipeline
 
 ```
 python run.py
- ├─ 1. Hard Score   Each model independently reviews the original PR with injected bugs (-r 1)
- ├─ 2. Soft Score   All models debate each PR (multi-round adversarial)
- ├─ 3. Judge        Hard Score: three-way vote on whether the bug was found
- │                  Soft Score: anonymous peer review across 4 dimensions (1-10)
- └─ 4. Report       Leaderboard + judge bias analysis
+ ├─ Raw      Each model × each PR → results/raw/<pr>/<model>.json
+ ├─ R1       Magpie single-round per model → results/r1/<pr>/<model>.json
+ ├─ Debate   All models multi-round debate → results/debate/<pr>/debate.json
+ ├─ Judge    Claude evaluates bug detection (hard) + anonymous quality scoring (soft)
+ └─ Report   Aggregate scores, bias analysis → results/reports/
 ```
 
-## Step-by-Step Execution
+## CLI
 
 ```bash
-python run.py --hard             # Run Hard Score only
-python run.py --soft             # Run Soft Score only
-python run.py --judge            # Run Judge only
-python run.py --report           # Generate report only
-python run.py --pr pr-47154      # Run a specific PR only
-python run.py --model claude     # Run a specific model only
-python run.py --force            # Force re-run (ignore existing results)
+python run.py                    # Full pipeline
+python run.py --raw              # Raw reviews only
+python run.py --r1               # Magpie R1 only
+python run.py --debate           # Multi-round debate only
+python run.py --judge            # Run judges only
+python run.py --report           # Generate reports only
+python run.py --pr pr-43542      # Specific PR
+python run.py --model claude     # Specific model (raw/r1)
+python run.py --no-context       # R1/debate without context injection
+python run.py --force            # Ignore checkpoints, re-run everything
 ```
 
-Resume from checkpoint is supported: completed tasks are automatically skipped.
+Checkpoint/resume is automatic — completed tasks are skipped on re-run.
 
 ## Configuration
 
-### config.yaml -- Models and Parameters
+### config.yaml
 
 ```yaml
 models:
   - id: claude
     magpie_provider: claude-code
-    judge_cmd: "claude -p"           # prompt via stdin
+    judge_cmd: "claude -p - --dangerously-skip-permissions"
   - id: gemini
     magpie_provider: gemini-cli
-    judge_cmd: "gemini"              # prompt via stdin
-  - id: codex
-    magpie_provider: codex-cli
-    judge_cmd: "codex exec -"        # prompt via stdin
+    judge_cmd: "gemini -y"
+  # Add more models here
+
+execution:
+  concurrency: 5
+
+hard_score:
+  rounds: 1          # R1 = single independent round
+
+soft_score:
+  rounds: 5          # Debate = 5 adversarial rounds
+  check_convergence: true
 ```
 
-**Adding a new model**: simply add an entry with `magpie_provider` and `judge_cmd`.
-
-### prs/manifest.yaml -- PR Dataset
+### prs/manifest.yaml
 
 ```yaml
 prs:
-  - id: pr-47154
-    url: "https://github.com/milvus-io/milvus/pull/47154"
-    category: hard        # hard = Hard Score, soft = Soft Score
-    difficulty: L2         # L1/L2/L3
+  - id: pr-44474
+    url: "https://github.com/milvus-io/milvus/pull/44474"
+    category: hard
+    difficulty: L3
     known_bugs:
-      - id: bug-name
-        description: "Bug description used by the judge for evaluation"
+      - id: lazy-pk-lifecycle
+        description: |
+          Lazy PK fetching leaves primary_keys_ partially populated...
 ```
 
-## Scoring System
+## Scoring
 
-### Hard Score: Bug Detection Rate
+**Hard Score** — Binary bug detection. Claude judges whether each model's review identified the known bug. Per-model for raw/r1; per-debate for debate mode.
 
-- Each model independently reviews the original PR that contains injected bugs
-- Three models vote to determine whether a known bug was found (majority rule)
-- Results are grouped by L1/L2/L3 difficulty levels
+**Soft Score** — Review quality rating (1-10). After debate, reviews are anonymized (Reviewer A/B/C/D/E, random mapping per PR). Each model judges all reviewers on 4 dimensions: accuracy, actionability, depth, clarity.
 
-### Soft Score: Review Quality
+**Judge Bias** — Self-score vs others-score delta per model, detecting whether models secretly favor their own reviews despite anonymization.
 
-- After a multi-model debate, each model's review is extracted
-- Reviews are anonymized (Reviewer A/B/C) with randomized mapping
-- Each model acts as a judge and scores all anonymous reviews
-- 4 dimensions: Accuracy, Actionability, Depth, Clarity (1-10)
+## Anti-Cheating
 
-## Results Directory
+- Local Milvus repo checked out to PR's merge commit (no post-fix code visible)
+- Prompts explicitly forbid browsing master, git operations, or referencing fix/revert PRs
+- Post-review validation scans for cheating signals (references to reverts, fixes, post-merge knowledge)
+- All 15 test PRs selected to have NO fix/revert cross-references on their GitHub pages
+
+## Project Structure
 
 ```
-results/
-├── hard/<pr-id>/<model-id>.json          # Independent review raw output
-├── soft/<pr-id>/debate.json              # Debate raw output
-├── judge/hard/<pr-id>/...                # Hard Score judge results
-├── judge/soft/<pr-id>/...                # Soft Score judge results
-└── reports/
-    ├── hard_scores.csv                   # Hard Score details
-    ├── soft_scores.csv                   # Soft Score details
-    ├── hard_summary.json                 # Hard Score summary
-    ├── soft_summary.json                 # Soft Score summary
-    ├── judge_bias.json                   # Judge bias analysis
-    └── summary.txt                       # Human-readable summary
+├── config.yaml              # Model configs, scoring parameters, review prompt
+├── run.py                   # Main pipeline runner
+├── prs/manifest.yaml        # PR dataset with known bugs
+├── prompts/                 # Judge prompt templates
+│   ├── hard_judge.txt
+│   └── soft_judge.txt
+└── scripts/
+    ├── common.py            # Shared utilities (Magpie runner, model CLI, etc.)
+    ├── raw_score.py         # Raw review pipeline
+    ├── hard_score.py        # R1 (Magpie single-round) pipeline
+    ├── soft_score.py        # Debate (multi-round) pipeline
+    ├── judge.py             # Hard + soft judge pipeline
+    └── report.py            # Report generator
 ```
 
 ## Prerequisites
 
 - Python 3.10+
-- [Magpie](https://github.com/liliu-z/magpie) (`npm install -g magpie`)
-- Claude Code CLI (`claude`)
-- Gemini CLI (`gemini`)
-- Codex CLI (`codex`)
-- GitHub CLI (`gh`) -- used by Magpie to fetch PR diffs
+- [Magpie](https://github.com/liliu-z/magpie) (`npm install -g @anthropic/magpie` or build from source)
+- [GitHub CLI](https://cli.github.com/) (`gh`)
+- Model CLIs: `claude`, `gemini`, `codex`, `qwen` (install per their docs)
+- For MiniMax: set `MINIMAX_API_KEY` environment variable
+
+## License
+
+MIT

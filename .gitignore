@@ -1,5 +1,40 @@
-magpie_configs/
+# Generated outputs
 results/
+magpie_configs/
+output/
+
+# Magpie history
+.magpie/
+
+# Temp files
+tmp_*
+*.diff
+*.patch
+output.json
+
+# Milvus source (cloned separately)
+milvus-master/
+milvus-master.tar.gz
+tmp_milvus/
+
+# Blog/docs (moved to separate repo)
+docs/
+
+# Scratch/utility scripts
+run_remaining.sh
+retry_codex.sh
+run_with_retry.py
+scripts/gemini_monitor.sh
+
+# Scratch Go/analysis files
+_pr_*.go
+tmp_extract_*.go
+new_prs_batch2.md
+review_feedback.md
+
+# Python
 __pycache__/
 *.pyc
+
+# macOS
 .DS_Store
